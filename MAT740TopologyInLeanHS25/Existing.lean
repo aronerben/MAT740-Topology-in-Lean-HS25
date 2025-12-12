@@ -46,6 +46,7 @@ theorem Open_iUnion
     rw [hi] at h
     exact h
 
+-- Comment Aron: Technically, a neighborhood need not be open (in our topology course at least)
 @[simp]
 /- A neighborhood of `x : X` is an open set containing `x`. -/
 def Nbhd (s : Set X) (x : X) := Open s ∧ x ∈ s
