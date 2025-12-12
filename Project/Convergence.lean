@@ -145,7 +145,41 @@ def generateFilter
       exact ⟨hAmem, by exact Set.Subset.trans hAsubC A_sub_B⟩
   }
 
--- x in closure if
+lemma inter_nonempty_iff_el
+  {X : Type*}
+  (A B : Set X)
+  (x : X)
+  (hA : x ∈ A)
+  (hB : x ∈ B)
+  : (A ∩ B) ≠ ∅
+:= by
+  intro heq
+  rw [Set.eq_empty_iff_forall_notMem] at heq
+  specialize heq x
+  simp only [Set.mem_inter_iff, not_and] at heq
+  exact heq hA hB
+
+lemma inter_empty_iff_subset_compl
+  {X : Type*}
+  (A B : Set X)
+  : A ∩ B = ∅ ↔ A ⊆ Bᶜ
+:= by
+  constructor
+  · intro heq x hxA
+    rw [Set.mem_compl_iff]
+    intro hxB
+    exact inter_nonempty_iff_el A B x hxA hxB heq
+  · intro hsub
+    ext x
+    constructor
+    · intro hmem
+      simp only [Set.mem_empty_iff_false]
+      rw [Set.mem_inter_iff] at hmem
+      specialize hsub hmem.1
+      have : x ∈ B := hmem.2
+      contradiction
+    · intro hmem
+      contradiction
 
 -- x ∈ Abar if and only if every neighborhood of x nontrivially intersects A
 lemma in_closure_iff_nbhd_inter
@@ -158,50 +192,30 @@ lemma in_closure_iff_nbhd_inter
   · constructor
     · intro hcl U hU heq
       have hxmemU := nbhd_mem_self x U hU
-      rw [Set.eq_empty_iff_forall_notMem] at heq
-      specialize heq x
-      simp only [Set.mem_inter_iff, not_and] at heq
-      exact heq hxmemA hxmemU
+      exact inter_nonempty_iff_el A U x hxmemA hxmemU heq
     · intro hnbhd U hUmem
       rw [Set.mem_setOf_eq] at hUmem
       exact hUmem.1 hxmemA
   · constructor
     · intro hcl U hU heq
-
+      rw [closure] at hcl
+      simp only [Set.mem_sInter, Set.mem_setOf_eq, and_imp] at hcl
+      simp_rw [neighborhoods, Nbhd, Set.mem_setOf_eq] at hU
+      have hsub := (inter_empty_iff_subset_compl A U).mp heq
+      specialize hcl Uᶜ hsub (by simp_all only [Closed, compl_compl])
+      have hU := hU.2
+      contradiction
     · intro hnbhd U hUmem
-
-
-    --
-  --   simp_rw [neighborhoods, Nbhd, Set.mem_setOf_eq] at hU
-  --   have hnsub : ¬A ⊆ Uᶜ := by
-  --     intro hsub
-  --     rw [closure] at hcl
-  --     simp at hcl
-  --     specialize hcl Uᶜ hsub (by simp_all only [compl_compl])
-  --     have hU := hU.2
-  --     contradiction
-  --   rw [Set.not_subset] at hnsub
-  --   rcases hnsub with ⟨a, haA, hnmem⟩
-  --   rw [Set.mem_compl_iff, not_not] at hnmem
-  --   rw [Set.eq_empty_iff_forall_notMem] at heq
-  --   specialize heq a
-  --   simp only [Set.mem_inter_iff, not_and] at heq
-  --   exact heq haA hnmem
-  -- · intro hnbhd U hUmem
-  --   rw [Set.mem_setOf_eq] at hUmem
-  --   have hsub : A ∩ Uᶜ = ∅ := by
-  --     aesop
-  --   have : x ∉ Uᶜ := by
-  --     simp_rw [Set.mem_compl_iff, not_not]
-
-
-
-
-
-
-
-
-
+      rw [Set.mem_setOf_eq] at hUmem
+      simp_rw [neighborhoods, Nbhd, Set.mem_setOf_eq] at hnbhd
+      rcases hUmem with ⟨hAsub, hcl⟩
+      by_contra hxU
+      rw [Closed] at hcl
+      specialize hnbhd Uᶜ ⟨hcl, Set.mem_compl hxU⟩
+      rw [←Set.nonempty_iff_ne_empty, Set.nonempty_def] at hnbhd
+      rcases hnbhd with ⟨y, hymemA, _⟩
+      specialize hAsub hymemA
+      contradiction
 
 theorem in_closure_iff_filter_conv
   {X : Type*} [Topology X]
@@ -211,6 +225,9 @@ theorem in_closure_iff_filter_conv
 := by
   constructor
   · intro hcl
+    have foo := (in_closure_iff_nbhd_inter A x).mp hcl
+    choose U hUmem using foo
+
 
   · intro hex
 end Convergence
