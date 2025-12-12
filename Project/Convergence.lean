@@ -217,6 +217,7 @@ lemma in_closure_iff_nbhd_inter
       specialize hAsub hymemA
       contradiction
 
+-- thm 3.9 bradley
 theorem in_closure_iff_filter_conv
   {X : Type*} [Topology X]
   (A : Set X)
@@ -225,6 +226,16 @@ theorem in_closure_iff_filter_conv
 := by
   constructor
   · intro hcl
+    let B : FilterBase X :=
+      {
+        Sets := {U ∩ A | U ∈ neighborhoods x},
+        univ_Sets := sorry,
+        inter_Sets := sorry,
+      }
+    let G := generateFilter B
+    use G
+
+
     have foo := (in_closure_iff_nbhd_inter A x).mp hcl
     choose U hUmem using foo
 
