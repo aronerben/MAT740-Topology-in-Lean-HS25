@@ -108,8 +108,14 @@ theorem closed_iff_compl_nhds
 
 structure FilterBase (X : Type*) where
   Sets : Set (Set X)
-  univ_Sets : Set.univ ∈ Sets
-  inter_Sets {A B} : A ∈ Sets → B ∈ Sets → A ∩ B ∈ Sets
+  nonempty_Sets : Sets ≠ ∅
+  inter_Sets {A B} : A ∈ Sets → B ∈ Sets → ∃ C ∈ Sets, C ⊆ A ∩ B
+
+-- Can this just be derived from Filter instance?
+instance instMembership
+  {X : Type*}
+  : Membership (Set X) (FilterBase X) where
+  mem := fun F U ↦ U ∈ F.Sets
 
 def upwardClosure
   {X : Type*}
@@ -117,15 +123,23 @@ def upwardClosure
   : Set (Set X) :=
   {C | ∃ A ∈ B, A ⊆ C}
 
-def generateFilter
+def generateFilterFromFilterBase
   {X : Type*}
   (B : FilterBase X)
   : Filter X :=
   {
     Sets := upwardClosure B.Sets
-    univ_Sets := by
-      use Set.univ
-      exact ⟨B.univ_Sets, by trivial⟩
+    nonempty_Sets := by
+      intro heq
+      rw [upwardClosure] at heq
+      have hmem := B.nonempty_Sets
+      rw [←Set.nonempty_iff_ne_empty, Set.nonempty_def] at hmem
+      rcases hmem with ⟨A, hAmem⟩
+      rw [Set.eq_empty_iff_forall_notMem] at heq
+      specialize heq A
+      simp only [Set.mem_setOf_eq, not_exists, not_and] at heq
+      specialize heq A hAmem (by exact subset_refl A)
+      exact heq
     inter_Sets := by
       rintro C D ⟨A, hAmem, hAsubC⟩ ⟨A', hA'mem, hA'subD⟩
       rw [upwardClosure]
@@ -217,30 +231,98 @@ lemma in_closure_iff_nbhd_inter
       specialize hAsub hymemA
       contradiction
 
+lemma Open_inter
+  {X : Type*} [Topology X]
+  {s : Set X} {t : Set X}
+  (h : Open s) (h' : Open t) : Open (s ∩ t) :=
+  Topology.Open_inter s t h h'
+
 -- thm 3.9 bradley
 theorem in_closure_iff_filter_conv
   {X : Type*} [Topology X]
   (A : Set X)
   (x : X)
-  : x ∈ closure A ↔ ∃ G : Filter X, G lim x ∧ A ∈ G ∧ ∅ ∉ G
+  : x ∈ closure A ↔ ∃ G : Filter X, G lim x ∧ A ∈ G ∧ ProperFilter G
 := by
+-- TODO maybe extract this to own thing
+  let B : FilterBase X :=
+    {
+      Sets := {U ∩ A | U ∈ neighborhoods x}
+      nonempty_Sets := by
+        intro heq
+        rw [Set.eq_empty_iff_forall_notMem] at heq
+        simp at heq
+        specialize heq Set.univ
+        simp_rw [neighborhoods, Nbhd, Set.mem_setOf_eq, Set.mem_univ, and_true] at heq
+        have : Open (@Set.univ X)  := Topology.Open_univ
+        contradiction
+      inter_Sets := by
+        rintro C D ⟨U_A, hUmem, heqC⟩ ⟨V_A, hVmem, heqD⟩
+        simp only [Set.mem_setOf_eq, Set.subset_inter_iff, exists_exists_and_eq_and]
+        use U_A ∩ V_A
+        constructor
+        · simp_rw [neighborhoods, Nbhd, Set.mem_setOf_eq] at *
+          constructor
+          · exact Open_inter hUmem.1 hVmem.1
+          · simp_rw [Set.mem_inter_iff]
+            exact ⟨hUmem.2, hVmem.2⟩
+        · constructor
+          · intro y hy
+            simp only [Set.mem_inter_iff] at hy
+            rw [←heqC]
+            exact Set.mem_inter hy.1.1 hy.2
+          · intro y hy
+            simp only [Set.mem_inter_iff] at hy
+            rw [←heqD]
+            exact Set.mem_inter hy.1.2 hy.2
+    }
   constructor
   · intro hcl
-    let B : FilterBase X :=
-      {
-        Sets := {U ∩ A | U ∈ neighborhoods x},
-        univ_Sets := sorry,
-        inter_Sets := sorry,
-      }
-    let G := generateFilter B
+    let G := generateFilterFromFilterBase B
     use G
-
-
-    have foo := (in_closure_iff_nbhd_inter A x).mp hcl
-    choose U hUmem using foo
-
-
+    constructor
+    · intro N hN
+      use N ∩ A
+      constructor
+      · use N
+      · exact Set.inter_subset_left
+    · constructor
+      · use A
+        constructor
+        · use Set.univ
+          constructor
+          · simp_rw [neighborhoods, Nbhd, Set.mem_setOf_eq]
+            exact ⟨Topology.Open_univ, by trivial⟩
+          · exact Set.univ_inter A
+        · trivial
+      -- G does not contain empty set
+      · intro hemptymem
+        rcases hemptymem with ⟨U, hUmem, hUsub⟩
+        simp only [Set.subset_empty_iff] at hUsub
+        rcases hUmem with ⟨V, hVmem, heq⟩
+        rw [hUsub] at heq
+        have hinter := (in_closure_iff_nbhd_inter A x).mp hcl
+        specialize hinter V hVmem
+        rw [Set.inter_comm] at hinter
+        contradiction
   · intro hex
+    rcases hex with ⟨G, hGlimx, ⟨hAmem, hproper⟩⟩
+    rw [filter_convergence] at hGlimx
+    have hsub : B.Sets ⊆ G.Sets := by
+      intro U hUmem
+      rcases hUmem with ⟨V, hVnbhd, heq⟩
+      specialize hGlimx hVnbhd
+      rw [←heq]
+      have := G.inter_Sets (hGlimx) (hAmem)
+      rcases this with ⟨W, hWmem, hWsub⟩
+      exact G.upward_Sets hWmem hWsub
+    rw [in_closure_iff_nbhd_inter]
+    intro U hUmem heq
+    specialize hsub (by use U)
+    rw [ProperFilter] at hproper
+    rw [Set.inter_comm] at heq
+    rw [←heq] at hproper
+    contradiction
 end Convergence
 
 -- TODO use different nbhd definition, note it

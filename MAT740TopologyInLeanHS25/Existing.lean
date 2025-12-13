@@ -46,7 +46,16 @@ theorem Open_iUnion
     rw [hi] at h
     exact h
 
--- Comment Aron: Technically, a neighborhood need not be open (in our topology course at least)
+@[simp]
+theorem Open_empty : Open (∅ : Set X) := by
+  have w : ∀ t ∈ (∅ : Set (Set X)), Open t := by
+    intro t ht
+    contradiction
+  apply Open_sUnion at w
+  rw [sUnion_empty] at w
+  exact w
+
+-- TODO fix: Comment Aron: Technically, a neighborhood need not be open (in our topology course at least)
 @[simp]
 /- A neighborhood of `x : X` is an open set containing `x`. -/
 def Nbhd (s : Set X) (x : X) := Open s ∧ x ∈ s
@@ -58,14 +67,21 @@ open TopologicalSpaces
 
 variable {X : Type*} {F G : Filter X}
 
+-- Modified to match the book
 structure Filter (X : Type*) where
   Sets : Set (Set X)
-  univ_Sets : Set.univ ∈ Sets
+  nonempty_Sets : Sets ≠ ∅
   upward_Sets {A B} : A ∈ Sets → A ⊆ B → B ∈ Sets
-  inter_Sets {A B} : A ∈ Sets → B ∈ Sets → A ∩ B ∈ Sets
+  inter_Sets {A B} : A ∈ Sets → B ∈ Sets → ∃ C ∈ Sets, C ⊆ A ∩ B
 
 instance instMembership : Membership (Set X) (Filter X) where
   mem := fun F U ↦ U ∈ F.Sets
+
+def ProperFilter
+  {X : Type*}
+  (F : Filter X)
+  : Prop :=
+  ∅ ∉ F
 
 theorem filter_eq : ∀ {F G : Filter X}, F.Sets = G.Sets → F = G := by
   intro F G h
