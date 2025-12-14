@@ -62,7 +62,8 @@ lemma nbhd_mem_self
 := by
   intro U hU
   simp_rw [neighborhoods, Nbhd, Set.mem_setOf_eq] at hU
-  exact hU.2
+  rcases hU with ⟨_, _, hmem, hsub⟩
+  exact hsub hmem
 
 theorem closed_iff_compl_nhds
   {X : Type*} [Topology X]
@@ -75,27 +76,29 @@ theorem closed_iff_compl_nhds
     use Aᶜ
     constructor
     · rw [Closed] at hcl
-      exact ⟨hcl, hx⟩
+      use Aᶜ
     · trivial
   · intro hnbhd
-    choose U hUmem hUsub using hnbhd
+    choose U hU using hnbhd
+    -- Pick out opens
+    choose V hV using fun x hx => (hU x hx).1
     have compl_eq
       -- Double union
-      : Aᶜ = (⋃ (x : X) (hx : x ∈ Aᶜ), U x hx)
+      : Aᶜ = (⋃ (x : X) (hx : x ∈ Aᶜ), V x hx)
     := by
       ext x
       constructor
       · intro hmem
-        specialize hUmem x hmem
-        simp_rw [neighborhoods, Nbhd, Set.mem_setOf_eq] at hUmem
+        specialize hV x hmem
         simp_rw [Set.mem_compl_iff, Set.mem_iUnion]
         use x, hmem
-        exact hUmem.2
+        exact hV.2.1
       · intro h
         simp_rw [Set.mem_iUnion] at h
-        rcases h with ⟨z, hz, memUz⟩
-        apply hUsub z hz
-        exact memUz
+        rcases h with ⟨z, hz, hzmem⟩
+        specialize hV z hz
+        specialize hU z hz
+        exact hU.2 (hV.2.2 hzmem)
     rw [Closed, compl_eq]
     apply Open_iUnion
     intro x
@@ -104,7 +107,7 @@ theorem closed_iff_compl_nhds
     simp only [Set.mem_range, Set.mem_compl_iff] at hmemrange
     rcases hmemrange with ⟨hnmem, heq⟩
     rw [←heq]
-    exact (hUmem x hnmem).1
+    exact (hV x hnmem).1
 
 structure FilterBase (X : Type*) where
   Sets : Set (Set X)
@@ -215,9 +218,12 @@ lemma in_closure_iff_nbhd_inter
       rw [closure] at hcl
       simp only [Set.mem_sInter, Set.mem_setOf_eq, and_imp] at hcl
       simp_rw [neighborhoods, Nbhd, Set.mem_setOf_eq] at hU
+      rcases hU with ⟨V, hV, hUmem, hUsub⟩
       have hsub := (inter_empty_iff_subset_compl A U).mp heq
-      specialize hcl Uᶜ hsub (by simp_all only [Closed, compl_compl])
-      have hU := hU.2
+      have hisub := Set.compl_subset_compl.mpr hUsub
+      have hsubc := Set.Subset.trans hsub hisub
+      specialize hcl Vᶜ hsubc (by simp only [Closed, compl_compl, hV])
+      have := hUsub hUmem
       contradiction
     · intro hnbhd U hUmem
       rw [Set.mem_setOf_eq] at hUmem
@@ -225,7 +231,7 @@ lemma in_closure_iff_nbhd_inter
       rcases hUmem with ⟨hAsub, hcl⟩
       by_contra hxU
       rw [Closed] at hcl
-      specialize hnbhd Uᶜ ⟨hcl, Set.mem_compl hxU⟩
+      specialize hnbhd Uᶜ ⟨Uᶜ, hcl, Set.mem_compl hxU, by trivial⟩
       rw [←Set.nonempty_iff_ne_empty, Set.nonempty_def] at hnbhd
       rcases hnbhd with ⟨y, hymemA, _⟩
       specialize hAsub hymemA
@@ -251,21 +257,30 @@ theorem in_closure_iff_filter_conv
       nonempty_Sets := by
         intro heq
         rw [Set.eq_empty_iff_forall_notMem] at heq
-        simp at heq
+        simp only [Set.mem_setOf_eq, not_exists, not_and, forall_apply_eq_imp_iff₂,
+          imp_false] at heq
         specialize heq Set.univ
-        simp_rw [neighborhoods, Nbhd, Set.mem_setOf_eq, Set.mem_univ, and_true] at heq
-        have : Open (@Set.univ X)  := Topology.Open_univ
-        contradiction
+        rw [neighborhoods] at heq
+        simp only [Nbhd, Set.mem_setOf_eq, Set.subset_univ, and_true, not_exists, not_and] at heq
+        exact heq Set.univ (Topology.Open_univ) (Set.mem_univ x)
       inter_Sets := by
         rintro C D ⟨U_A, hUmem, heqC⟩ ⟨V_A, hVmem, heqD⟩
         simp only [Set.mem_setOf_eq, Set.subset_inter_iff, exists_exists_and_eq_and]
         use U_A ∩ V_A
+        -- TODO extract to lemmas
         constructor
         · simp_rw [neighborhoods, Nbhd, Set.mem_setOf_eq] at *
+          rcases hUmem with ⟨U, hUopen, hUmem, hUsub⟩
+          rcases hVmem with ⟨V, hVopen, hVmem, hVsub⟩
+          use U ∩ V
           constructor
-          · exact Open_inter hUmem.1 hVmem.1
-          · simp_rw [Set.mem_inter_iff]
-            exact ⟨hUmem.2, hVmem.2⟩
+          · exact Open_inter hUopen hVopen
+          · constructor
+            · rw [Set.mem_inter_iff]
+              exact ⟨hUmem, hVmem⟩
+            · intro y hy
+              rw [Set.mem_inter_iff] at hy
+              exact ⟨hUsub hy.1, hVsub hy.2⟩
         · constructor
           · intro y hy
             simp only [Set.mem_inter_iff] at hy
@@ -292,6 +307,7 @@ theorem in_closure_iff_filter_conv
         · use Set.univ
           constructor
           · simp_rw [neighborhoods, Nbhd, Set.mem_setOf_eq]
+            use Set.univ
             exact ⟨Topology.Open_univ, by trivial⟩
           · exact Set.univ_inter A
         · trivial
@@ -324,5 +340,3 @@ theorem in_closure_iff_filter_conv
     rw [←heq] at hproper
     contradiction
 end Convergence
-
--- TODO use different nbhd definition, note it

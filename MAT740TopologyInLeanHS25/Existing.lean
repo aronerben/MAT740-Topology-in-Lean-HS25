@@ -55,10 +55,8 @@ theorem Open_empty : Open (∅ : Set X) := by
   rw [sUnion_empty] at w
   exact w
 
--- TODO fix: Comment Aron: Technically, a neighborhood need not be open (in our topology course at least)
 @[simp]
-/- A neighborhood of `x : X` is an open set containing `x`. -/
-def Nbhd (s : Set X) (x : X) := Open s ∧ x ∈ s
+def Nbhd (N : Set X) (x : X) := ∃ V, Open V ∧ x ∈ V ∧ V ⊆ N
 
 end TopologicalSpaces
 
