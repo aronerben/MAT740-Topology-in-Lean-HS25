@@ -198,6 +198,31 @@ lemma inter_empty_iff_subset_compl
     · intro hmem
       contradiction
 
+lemma closure_closed
+  {X : Type*} [Topology X]
+  (A : Set X)
+  : Closed (closure A)
+:= by
+  rw [closure, Closed, Set.compl_sInter]
+  apply Open_sUnion
+  intro B hmem
+  simp only [Closed, Set.mem_image, Set.mem_setOf_eq] at hmem
+  rcases hmem with ⟨C, ⟨_, hopen⟩, heq⟩
+  rw [←heq]
+  exact hopen
+
+lemma subset_self_closure
+  {X : Type*} [Topology X]
+  (A : Set X)
+  : A ⊆ closure A
+:= by
+  intro x hx
+  rw [closure]
+  simp_rw [Set.mem_sInter, Set.mem_setOf_eq]
+  intro B hBmem
+  rcases hBmem with ⟨hsub, _⟩
+  exact hsub hx
+
 -- x ∈ Abar if and only if every neighborhood of x nontrivially intersects A
 lemma in_closure_iff_nbhd_inter
   {X : Type*} [Topology X]
@@ -205,43 +230,29 @@ lemma in_closure_iff_nbhd_inter
   (x : X)
   : x ∈ closure A ↔ ∀ U ∈ neighborhoods x, (A ∩ U) ≠ ∅
 := by
-  by_cases hxmemA : x ∈ A
-  · constructor
-    · intro hcl U hU heq
-      have hxmemU := nbhd_mem_self x U hU
-      exact inter_nonempty_iff_el A U x hxmemA hxmemU heq
-    · intro hnbhd U hUmem
-      rw [Set.mem_setOf_eq] at hUmem
-      exact hUmem.1 hxmemA
-  · constructor
-    · intro hcl U hU heq
-      rw [closure] at hcl
-      simp only [Set.mem_sInter, Set.mem_setOf_eq, and_imp] at hcl
-      simp_rw [neighborhoods, Nbhd, Set.mem_setOf_eq] at hU
-      rcases hU with ⟨V, hV, hUmem, hUsub⟩
-      have hsub := (inter_empty_iff_subset_compl A U).mp heq
-      have hisub := Set.compl_subset_compl.mpr hUsub
-      have hsubc := Set.Subset.trans hsub hisub
-      specialize hcl Vᶜ hsubc (by simp only [Closed, compl_compl, hV])
-      have := hUsub hUmem
-      contradiction
-    · intro hnbhd U hUmem
-      rw [Set.mem_setOf_eq] at hUmem
-      simp_rw [neighborhoods, Nbhd, Set.mem_setOf_eq] at hnbhd
-      rcases hUmem with ⟨hAsub, hcl⟩
-      by_contra hxU
-      rw [Closed] at hcl
-      specialize hnbhd Uᶜ ⟨Uᶜ, hcl, Set.mem_compl hxU, by trivial⟩
-      rw [←Set.nonempty_iff_ne_empty, Set.nonempty_def] at hnbhd
-      rcases hnbhd with ⟨y, hymemA, _⟩
-      specialize hAsub hymemA
-      contradiction
-
-lemma Open_inter
-  {X : Type*} [Topology X]
-  {s : Set X} {t : Set X}
-  (h : Open s) (h' : Open t) : Open (s ∩ t) :=
-  Topology.Open_inter s t h h'
+  constructor
+  · contrapose
+    intro hnnbhd hcl
+    push_neg at hnnbhd
+    rcases hnnbhd with ⟨U, hUmem, heq⟩
+    rcases hUmem with ⟨V, hVopen, hVmem, hVsub⟩
+    rw [inter_empty_iff_subset_compl] at heq
+    simp only [closure, Set.mem_sInter, Set.mem_setOf_eq, and_imp] at hcl
+    rw [←Set.compl_subset_compl] at hVsub
+    specialize hcl Vᶜ (Set.Subset.trans heq hVsub)
+      (by simp only [Closed, compl_compl, hVopen])
+    exact hcl hVmem
+  · contrapose
+    intro hncl
+    push_neg
+    use (closure A)ᶜ
+    constructor
+    · use (closure A)ᶜ
+      constructor
+      · exact closure_closed A
+      · trivial
+    · have := Set.disjoint_compl_right_iff_subset.mpr (subset_self_closure A)
+      exact Disjoint.inter_eq this
 
 -- thm 3.9 bradley
 theorem in_closure_iff_filter_conv
@@ -274,7 +285,7 @@ theorem in_closure_iff_filter_conv
           rcases hVmem with ⟨V, hVopen, hVmem, hVsub⟩
           use U ∩ V
           constructor
-          · exact Open_inter hUopen hVopen
+          · exact Topology.Open_inter U V hUopen hVopen
           · constructor
             · rw [Set.mem_inter_iff]
               exact ⟨hUmem, hVmem⟩
