@@ -114,7 +114,7 @@ structure FilterBase (X : Type*) where
   nonempty_Sets : Sets ≠ ∅
   inter_Sets {A B} : A ∈ Sets → B ∈ Sets → ∃ C ∈ Sets, C ⊆ A ∩ B
 
--- Can this just be derived from Filter instance?
+-- Can this just be derived via Filter instance using some coercion?
 instance instMembership
   {X : Type*}
   : Membership (Set X) (FilterBase X) where
@@ -233,6 +233,7 @@ lemma in_closure_iff_nbhd_inter
   constructor
   · contrapose
     intro hnnbhd hcl
+    -- TODO THIS IS THE PROBLEM
     push_neg at hnnbhd
     rcases hnnbhd with ⟨U, hUmem, heq⟩
     rcases hUmem with ⟨V, hVopen, hVmem, hVsub⟩
@@ -244,6 +245,7 @@ lemma in_closure_iff_nbhd_inter
     exact hcl hVmem
   · contrapose
     intro hncl
+    -- TODO THIS IS THE PROBLEM
     push_neg
     use (closure A)ᶜ
     constructor
@@ -254,6 +256,75 @@ lemma in_closure_iff_nbhd_inter
     · have := Set.disjoint_compl_right_iff_subset.mpr (subset_self_closure A)
       exact Disjoint.inter_eq this
 
+def nbhd_inter_filterbase
+  {X : Type*} [Topology X]
+  (A : Set X)
+  (x : X)
+  : FilterBase X
+:= {
+    Sets := {U ∩ A | U ∈ neighborhoods x}
+    nonempty_Sets := by
+      intro heq
+      rw [Set.eq_empty_iff_forall_notMem] at heq
+      simp_rw [Set.mem_setOf_eq, not_exists, not_and, forall_apply_eq_imp_iff₂,
+        imp_false] at heq
+      specialize heq Set.univ
+      rw [neighborhoods] at heq
+      simp only [Nbhd, Set.mem_setOf_eq, Set.subset_univ, and_true, not_exists, not_and] at heq
+      exact heq Set.univ (Topology.Open_univ) (Set.mem_univ x)
+    inter_Sets := by
+      rintro C D ⟨U, hUnhbd, heqC⟩ ⟨V, hVnhbd, heqD⟩
+      simp only [Set.mem_setOf_eq, Set.subset_inter_iff, exists_exists_and_eq_and]
+      use U ∩ V
+      constructor
+      · simp_rw [neighborhoods, Nbhd, Set.mem_setOf_eq] at *
+        rcases hUnhbd with ⟨U', hU'open, hU'mem, hU'sub⟩
+        rcases hVnhbd with ⟨V', hV'open, hV'mem, hV'sub⟩
+        use U' ∩ V'
+        constructor
+        · exact Topology.Open_inter U' V' hU'open hV'open
+        · constructor
+          · rw [Set.mem_inter_iff]
+            exact ⟨hU'mem, hV'mem⟩
+          · intro y hy
+            rw [Set.mem_inter_iff] at hy
+            exact ⟨hU'sub hy.1, hV'sub hy.2⟩
+      · constructor
+        · intro y hy
+          simp only [Set.mem_inter_iff] at hy
+          rw [←heqC]
+          exact Set.mem_inter hy.1.1 hy.2
+        · intro y hy
+          simp only [Set.mem_inter_iff] at hy
+          rw [←heqD]
+          exact Set.mem_inter hy.1.2 hy.2
+  }
+
+def nbhd_inter_filter
+  {X : Type*} [Topology X]
+  (A : Set X)
+  (x : X)
+  : Filter X :=
+  generateFilterFromFilterBase (nbhd_inter_filterbase A x)
+
+-- G does not contain empty set
+lemma nbhd_inter_filter_proper
+  {X : Type*} [Topology X]
+  (A : Set X)
+  (x : X)
+  (hcl : x ∈ closure A)
+  : ProperFilter (nbhd_inter_filter A x)
+:= by
+  intro hemptymem
+  rcases hemptymem with ⟨U, hUmem, hUsub⟩
+  simp only [Set.subset_empty_iff] at hUsub
+  rcases hUmem with ⟨V, hVmem, heq⟩
+  rw [hUsub] at heq
+  have hinter := (in_closure_iff_nbhd_inter A x).mp hcl
+  specialize hinter V hVmem
+  rw [Set.inter_comm] at hinter
+  contradiction
+
 -- thm 3.9 bradley
 theorem in_closure_iff_filter_conv
   {X : Type*} [Topology X]
@@ -261,47 +332,7 @@ theorem in_closure_iff_filter_conv
   (x : X)
   : x ∈ closure A ↔ ∃ G : Filter X, G lim x ∧ A ∈ G ∧ ProperFilter G
 := by
--- TODO maybe extract this to own thing
-  let B : FilterBase X :=
-    {
-      Sets := {U ∩ A | U ∈ neighborhoods x}
-      nonempty_Sets := by
-        intro heq
-        rw [Set.eq_empty_iff_forall_notMem] at heq
-        simp only [Set.mem_setOf_eq, not_exists, not_and, forall_apply_eq_imp_iff₂,
-          imp_false] at heq
-        specialize heq Set.univ
-        rw [neighborhoods] at heq
-        simp only [Nbhd, Set.mem_setOf_eq, Set.subset_univ, and_true, not_exists, not_and] at heq
-        exact heq Set.univ (Topology.Open_univ) (Set.mem_univ x)
-      inter_Sets := by
-        rintro C D ⟨U_A, hUmem, heqC⟩ ⟨V_A, hVmem, heqD⟩
-        simp only [Set.mem_setOf_eq, Set.subset_inter_iff, exists_exists_and_eq_and]
-        use U_A ∩ V_A
-        -- TODO extract to lemmas
-        constructor
-        · simp_rw [neighborhoods, Nbhd, Set.mem_setOf_eq] at *
-          rcases hUmem with ⟨U, hUopen, hUmem, hUsub⟩
-          rcases hVmem with ⟨V, hVopen, hVmem, hVsub⟩
-          use U ∩ V
-          constructor
-          · exact Topology.Open_inter U V hUopen hVopen
-          · constructor
-            · rw [Set.mem_inter_iff]
-              exact ⟨hUmem, hVmem⟩
-            · intro y hy
-              rw [Set.mem_inter_iff] at hy
-              exact ⟨hUsub hy.1, hVsub hy.2⟩
-        · constructor
-          · intro y hy
-            simp only [Set.mem_inter_iff] at hy
-            rw [←heqC]
-            exact Set.mem_inter hy.1.1 hy.2
-          · intro y hy
-            simp only [Set.mem_inter_iff] at hy
-            rw [←heqD]
-            exact Set.mem_inter hy.1.2 hy.2
-    }
+  let B : FilterBase X := nbhd_inter_filterbase A x
   constructor
   · intro hcl
     let G := generateFilterFromFilterBase B
@@ -322,16 +353,7 @@ theorem in_closure_iff_filter_conv
             exact ⟨Topology.Open_univ, by trivial⟩
           · exact Set.univ_inter A
         · trivial
-      -- G does not contain empty set
-      · intro hemptymem
-        rcases hemptymem with ⟨U, hUmem, hUsub⟩
-        simp only [Set.subset_empty_iff] at hUsub
-        rcases hUmem with ⟨V, hVmem, heq⟩
-        rw [hUsub] at heq
-        have hinter := (in_closure_iff_nbhd_inter A x).mp hcl
-        specialize hinter V hVmem
-        rw [Set.inter_comm] at hinter
-        contradiction
+      · exact nbhd_inter_filter_proper A x hcl
   · intro hex
     rcases hex with ⟨G, hGlimx, ⟨hAmem, hproper⟩⟩
     rw [filter_convergence] at hGlimx
